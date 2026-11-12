@@ -1,6 +1,6 @@
 # PuppyGraph on Cloudera AWC
 
-Schema 2 ACE bundle for PuppyGraph 1.1.0. This is the bundle that deployed on AWC 2.0.0-b.70 with strict ACE RBAC enabled.
+Schema 2 ACE bundle for PuppyGraph 1.1.0. This is the bundle that deployed on AWC 2.0.0 with strict ACE RBAC enabled.
 
 `role.yaml` is a namespaced Role for the engine ServiceAccount. The AWC hub creates the RoleBinding. The engine installs the PuppyGraph Helm chart in its own namespace. Keep this Role. A ClusterRole is rejected under strict ACE RBAC. A `role.yaml` change does not require a new PuppyGraph image. Republish the engine metadata.
 
