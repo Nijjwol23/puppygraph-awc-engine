@@ -1,0 +1,42 @@
+apiVersion: ecosystem.awc.cloudera.com/v1alpha10
+kind: Blueprint
+metadata:
+  name: puppygraph
+spec:
+  outcome: "PuppyGraph"
+  owner: "PuppyGraph"
+  description: "Query relational and lakehouse data as a graph without ETL. Deploys PuppyGraph 1.x via Helm on AWC."
+
+  instances:
+    - name: "puppygraph"
+      engine: "puppygraph-plugin"
+      minimumVersion: "1.1.0"
+
+  hardwareTiers:
+    - name: default
+      cluster:
+        kubernetesVersion: "v1.33.5"
+        nodeGroups:
+          - id: "puppygraph-compute"
+            category: "worker"
+            displayName: "PuppyGraph Nodes"
+            description: "Worker nodes for PuppyGraph"
+            nodeCount:
+              default: 2
+              minimum: 1
+              hint: "Use minimum for dev; scale for production"
+            resources:
+              minimum:
+                cpu: "8"
+                memory: "32Gi"
+                hasGPU: false
+              recommended:
+                cpu: "16"
+                memory: "64Gi"
+                hasGPU: false
+              hint: "Align with Helm resource overrides in engine template"
+            storage:
+              disk:
+                default: "200Gi"
+                minimum: "100Gi"
+                hint: "Node disk plus application PVC"

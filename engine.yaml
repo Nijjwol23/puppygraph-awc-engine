@@ -1,0 +1,162 @@
+apiVersion: ecosystem.awc.cloudera.com/v1alpha10
+kind: Engine
+metadata:
+  name: puppygraph-plugin
+  annotations:
+    ecosystem.awc.cloudera.com/requires-embedded-registry: "true"
+spec:
+  displayName: "PuppyGraph"
+  description: "PuppyGraph 1.x graph query engine deployed via Flux HelmRelease."
+  imageCatalog: puppygraph-images-1-1-0
+  chartCatalog: puppygraph-charts-1-0-0
+  provides:
+  - name: puppygraphUi
+    capability: landing-page
+    value: |
+      url: "https://puppygraph-{{ .Metadata.Namespace }}.apps.{{ .Cluster.DomainName }}"
+  - name: endpoint
+    capability: endpoint
+    value: |
+      url: "http://{{ .Metadata.Name }}-controlplane-service.{{ .Metadata.Namespace }}.svc.cluster.local:8081"
+  configSchema:
+    type: object
+    properties:
+      controlplaneReplicas:
+        type: integer
+        default: 1
+        minimum: 1
+      leaderReplicas:
+        type: integer
+        default: 1
+        minimum: 1
+      computeReplicas:
+        type: integer
+        default: 1
+        minimum: 1
+      storageSize:
+        type: string
+        default: "200Gi"
+      priorityIpCidr:
+        type: string
+        default: ""
+      username:
+        type: string
+        default: "puppygraph"
+      password:
+        type: string
+        default: "changeme"
+  template: |
+    apiVersion: security.awc.cloudera.com/v1alpha1
+    kind: AuthConfig
+    metadata:
+      name: default
+      namespace: {{ .Metadata.Namespace }}
+    spec:
+      meshMode: Ambient
+      enableAWCAuth: false
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: HelmRepository
+    metadata:
+      name: {{ .Metadata.Name }}-repo
+    spec:
+      interval: 5m
+      type: oci
+      url: oci://{{ .Chart.puppygraph.registry }}/{{ dir .Chart.puppygraph.repository }}
+    ---
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ .Metadata.Name }}-config
+    data:
+      values.yaml: |
+        nameOverride: {{ .Metadata.Name | quote }}
+        controlplane:
+          replicas: {{ .Config.controlplaneReplicas }}
+        leader:
+          replicas: {{ .Config.leaderReplicas }}
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              memory: "8Gi"
+        compute:
+          replicas: {{ .Config.computeReplicas }}
+          resources:
+            requests:
+              cpu: "6"
+              memory: "24Gi"
+            limits:
+              memory: "24Gi"
+        storage:
+          size: {{ .Config.storageSize | quote }}
+        env:
+          common:
+            PRIORITY_IP_CIDR: {{ .Config.priorityIpCidr | quote }}
+        secrets:
+          create: true
+          PUPPYGRAPH_USERNAME: {{ .Config.username | quote }}
+          PUPPYGRAPH_PASSWORD: {{ .Config.password | quote }}
+        service:
+          controlplane:
+            type: ClusterIP
+          query:
+            type: ClusterIP
+    ---
+    apiVersion: helm.toolkit.fluxcd.io/v2
+    kind: HelmRelease
+    metadata:
+      name: {{ .Metadata.Name }}
+    spec:
+      interval: 1m
+      timeout: 20m
+      install:
+        timeout: 15m
+        remediation:
+          retries: 3
+      chart:
+        spec:
+          chart: {{ base .Chart.puppygraph.repository }}
+          version: {{ .Chart.puppygraph.version }}
+          sourceRef:
+            kind: HelmRepository
+            name: {{ .Metadata.Name }}-repo
+      values:
+        image:
+          repository: {{ printf "%s/%s" .Image.puppygraph.registry .Image.puppygraph.repository | quote }}
+          tag: {{ .Image.puppygraph.tag | quote }}
+          pullPolicy: Always
+      valuesFrom:
+        - kind: ConfigMap
+          name: {{ .Metadata.Name }}-config
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: {{ .Metadata.Name }}-httproute
+    spec:
+      hostnames:
+        - "puppygraph-{{ .Metadata.Namespace }}.apps.{{ .Cluster.DomainName }}"
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: default-awc
+          namespace: istio-ingress
+      rules:
+        - matches:
+            - path:
+                type: PathPrefix
+                value: /
+          backendRefs:
+            - kind: Service
+              name: {{ .Metadata.Name }}-controlplane-service
+              port: 8081
+  healthChecks:
+  - resource:
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: "{{ .Metadata.Name }}"
+    condition:
+      type: Ready
+      status: "True"

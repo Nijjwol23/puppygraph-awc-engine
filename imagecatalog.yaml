@@ -1,0 +1,10 @@
+apiVersion: ecosystem.awc.cloudera.com/v1alpha10
+kind: ImageCatalog
+metadata:
+  name: puppygraph-images-1-1-0
+spec:
+  images:
+    - id: puppygraph
+      registry: docker-sandbox.infra.cloudera.com
+      repository: nijjwol-awc/puppygraph/puppygraph
+      tag: "1.1.0"
